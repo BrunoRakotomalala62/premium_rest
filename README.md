@@ -7,8 +7,12 @@ REST API **serverless (Vercel)** au-dessus de l'API [CodeCraft](https://codecraf
 - 🖼️ **vision** — analyse d'images par URL ;
 - 🤖 **33 modèles récents** — Claude 5 / Opus 5, Claude Mythos, GPT‑5.6 Luna / Terra / Sol, Gemini 3.7, Grok 4.6, DeepSeek‑V4…
 
-Aucune dépendance npm : le projet n'utilise que le `fetch` natif de Node 18+,
-donc déploiement Vercel instantané.
+Aucune dépendance npm : le projet n'utilise que le `fetch` natif, donc déploiement Vercel instantané.
+
+> **Runtime : Edge.** Les handlers tournent en **Vercel Edge Functions** (`export const config = { runtime: 'edge' }`).
+> C'est volontaire : l'API CodeCraft est derrière Cloudflare, qui renvoie un `403 cf-mitigated: challenge`
+> aux IP du runtime Node (Lambda/AWS) de Vercel. L'egress Edge de Vercel, lui, passe. Ne repassez pas les
+> handlers en runtime Node sans avoir vérifié ce point.
 
 ---
 
@@ -123,14 +127,19 @@ Puis dans **Vercel → Project → Settings → Environment Variables**, ajoutez
 ### Persistance de l'historique
 
 L'API CodeCraft est *stateless* : c'est **ce projet** qui réassemble l'historique.
-Deux backends dans `lib/store.js` :
+Deux backends dans `lib/store.mjs` :
 
-- **mémoire** (défaut) — fonctionne sans config, mais un cold start Vercel peut perdre le contexte ;
-- **Upstash Redis REST** — durable, dès que `UPSTASH_REDIS_REST_URL` et
-  `UPSTASH_REDIS_REST_TOKEN` sont définies (offre gratuite suffisante).
+- **mémoire** (défaut) — aucune config, mais en Edge chaque invocation peut être un isolate
+  neuf : la continuité n'est alors **pas garantie** ;
+- **Upstash Redis REST** — **recommandé/indispensable en production** dès que
+  `UPSTASH_REDIS_REST_URL` et `UPSTASH_REDIS_REST_TOKEN` sont définies (offre gratuite suffisante).
 
 Ajustez la fenêtre avec `MAX_HISTORY_MESSAGES` (défaut 24 messages) et
 `CONVERSATION_TTL_SECONDS` (défaut 86400 s = 24 h).
+
+Sans store durable, deux solutions de continuité côté client :
+- passer `history=<JSON>` à chaque appel (tableau de messages OpenAI) ;
+- ou récupérer l'historique via `?return_history=1` puis le renvoyer à l'appel suivant.
 
 ---
 
@@ -138,20 +147,20 @@ Ajustez la fenêtre avec `MAX_HISTORY_MESSAGES` (défaut 24 messages) et
 
 ```
 premium_rest/
-├── api/
-│   ├── ai.js        # GET /api/ai
-│   ├── vision.js    # GET /api/vision
-│   ├── models.js    # GET /api/models
-│   ├── reset.js     # GET /api/reset
-│   └── index.js     # GET /api (doc)
-├── lib/
-│   ├── ai.js        # logique chat/vision
-│   ├── codecraft.js # client upstream
-│   ├── models.js    # catalogue (généré depuis /v1/models)
-│   ├── store.js     # mémoire de conversation
-│   └── http.js      # helpers HTTP / CORS / auth
+├── api/                 # Edge Functions (ESM)
+│   ├── ai.mjs           # GET /api/ai
+│   ├── vision.mjs       # GET /api/vision
+│   ├── models.mjs       # GET /api/models
+│   ├── reset.mjs        # GET /api/reset
+│   └── index.mjs        # GET /api (doc)
+├── lib/                 # modules ESM
+│   ├── ai.mjs           # logique chat/vision
+│   ├── codecraft.mjs    # client upstream
+│   ├── models.mjs       # catalogue (généré depuis /v1/models)
+│   ├── store.mjs        # mémoire de conversation
+│   └── http.mjs         # helpers Web / CORS / auth
 ├── test/
-│   ├── dev-server.cjs
+│   ├── dev-server.cjs   # émule les Edge Functions en local
 │   └── smoke.cjs
 ├── vercel.json
 └── .env.example
