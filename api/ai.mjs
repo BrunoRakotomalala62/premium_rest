@@ -4,7 +4,7 @@ export const config = { runtime: 'edge' };
 // Continuous text conversation, remembered per uid.
 // If an `image` param is present it transparently routes to vision.
 
-import { preflight, query, json, errorResponse, requireAuth } from '../lib/http.mjs';
+import { preflight, readParams, json, errorResponse, requireAuth } from '../lib/http.mjs';
 import { runChat, runVision } from '../lib/ai.mjs';
 
 export default async function handler(req) {
@@ -15,7 +15,7 @@ export default async function handler(req) {
     return errorResponse(405, 'Method not allowed. Use GET.', 'method_not_allowed');
   }
 
-  const params = query(req);
+  const params = await readParams(req);
   const auth = requireAuth(req, params);
   if (auth) return auth;
 
