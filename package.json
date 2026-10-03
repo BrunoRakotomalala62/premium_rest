@@ -1,0 +1,14 @@
+{
+  "name": "premium_rest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "REST API (Vercel serverless) au-dessus de CodeCraft API : conversation continue par uid + vision.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "node test/dev-server.cjs",
+    "start": "node test/dev-server.cjs",
+    "test": "node test/smoke.cjs"
+  }
+}

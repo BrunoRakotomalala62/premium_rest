@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 60,
+      "memory": 512
+    }
+  },
+  "rewrites": [
+    { "source": "/ai", "destination": "/api/ai" },
+    { "source": "/vision", "destination": "/api/vision" },
+    { "source": "/models", "destination": "/api/models" },
+    { "source": "/reset", "destination": "/api/reset" },
+    { "source": "/", "destination": "/api/index" }
+  ]
+}
