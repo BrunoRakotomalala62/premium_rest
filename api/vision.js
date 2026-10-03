@@ -23,6 +23,6 @@ module.exports = async function handler(req, res) {
     const { status, body } = await runVision(params);
     return sendJson(res, status, body);
   } catch (e) {
-    return sendError(res, e.status || 500, e.message || 'Internal error', e.code || 'internal_error');
+    return sendError(res, e.status || 500, e.message || 'Internal error', e.code || 'internal_error', e.details);
   }
 };
