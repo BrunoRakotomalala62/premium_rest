@@ -22,6 +22,7 @@ export default async function handler(req) {
       vision: `GET ${base}/vision?prompt=décrivez cette photo&image=https://...jpg&model=${VISION_DEFAULT_MODEL}&uid=123`,
       models: `GET ${base}/models`,
       reset: `GET ${base}/reset?uid=123`,
+      keys: `GET ${base}/keys`,
     },
     params: {
       prompt: 'required — the user message',
@@ -35,6 +36,7 @@ export default async function handler(req) {
       max_tokens: 'optional — max generated tokens',
       temperature: 'optional — 0.0–2.0',
     },
+    rotation: 'automatic multi-key failover — add CODECRAFT_API_KEYS (or CODECRAFT_API_KEY_1, _2, …) to rotate on quota/rate-limit',
     models_count: MODEL_CATALOG.length,
     aliases: ['claude-5', 'mythos', 'luna', 'terra', 'sol', 'gpt-5.6', 'gemini', 'grok', 'deepseek', 'qwen', 'kimi'],
   });

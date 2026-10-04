@@ -36,11 +36,13 @@ const routes = {
   '/api/vision': '../api/vision.mjs',
   '/api/models': '../api/models.mjs',
   '/api/reset': '../api/reset.mjs',
+  '/api/keys': '../api/keys.mjs',
   '/': '../api/index.mjs',
   '/ai': '../api/ai.mjs',
   '/vision': '../api/vision.mjs',
   '/models': '../api/models.mjs',
   '/reset': '../api/reset.mjs',
+  '/keys': '../api/keys.mjs',
 };
 
 const PORT = process.env.PORT || 3000;

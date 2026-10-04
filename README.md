@@ -25,6 +25,7 @@ Aucune dépendance npm : le projet n'utilise que le `fetch` natif, donc déploie
 | `GET` | `/api/ai?prompt=...&image=URL_IMAGE&uid=123` | Identique à `/api/vision` (raccourci) |
 | `GET` | `/api/models` | Liste des modèles (+ alias et capacités vision) |
 | `GET` | `/api/reset?uid=123` | Efface la conversation d'un `uid` |
+| `GET` | `/api/keys` | État des clés CodeCraft (rotation) — labels masqués |
 | `GET` | `/` ou `/api` | Auto-documentation JSON |
 
 Des réécritures sont fournies dans `vercel.json` : `/ai`, `/vision`, `/models`, `/reset`
@@ -64,6 +65,88 @@ pointent vers les mêmes handlers sans le préfixe `/api`.
 | `kimi` | `kimi-k3` |
 
 Défaut : `claude-opus-5` (texte et vision). 28 modèles sur 33 acceptent les images.
+
+---
+
+## Rotation de clés API (quotas)
+
+Un plan CodeCraft donne ~**1 000 000 de tokens/mois**. Quand ce quota est épuisé,
+l'upstream répond `429` / `402` / `403` (ou `401` si la clé est révoquée). Au lieu de
+renvoyer une erreur à l'utilisateur, l'API **bascule automatiquement sur la clé suivante**.
+
+### Configurer plusieurs clés
+
+Ajoutez-les dans **Vercel → Project → Settings → Environment Variables**. Elles sont
+lues dans cet ordre (les doublons sont ignorés) :
+
+1. `CODECRAFT_API_KEY` / `CODECRAFT_KEY` — clé primaire ;
+2. `CODECRAFT_API_KEYS` — liste, séparée par des virgules, points-virgules ou retours à la ligne ;
+3. `CODECRAFT_API_KEY_1`, `CODECRAFT_API_KEY_2`, … — emplacements numérotés (jusqu'à
+   `CODECRAFT_KEYS_MAX`, défaut 50). `CODECRAFT_KEY_N` marche aussi.
+
+```bash
+# Exemple : 3 clés
+CODECRAFT_API_KEYS=cc_key1,cc_key2,cc_key3
+# équivaut à :
+CODECRAFT_API_KEY_1=cc_key1
+CODECRAFT_API_KEY_2=cc_key2
+CODECRAFT_API_KEY_3=cc_key3
+```
+
+> Une seule clé continue de fonctionner exactement comme avant : la rotation est
+> automatiquement désactivée (`enabled: false`) et seul l'échec remonte.
+
+### Ce qui déclenche une rotation
+
+| Réponse upstream | Interprétation | Clé mise de côté |
+| ---------------- | -------------- | ---------------- |
+| `401` | clé invalide / révoquée | 30 min (`KEY_COOLDOWN_INVALID_MS`) |
+| `402` | paiement/quota requis | 1 h (`KEY_COOLDOWN_QUOTA_MS`) |
+| `403` + message quota | quota épuisé | 1 h |
+| `403` sans mot-clé quota | accès refusé (plan/permission) | 15 min (`KEY_COOLDOWN_FORBIDDEN_MS`) |
+| `429` + message quota | quota épuisé | 1 h |
+| `429` + `Retry-After` | rate limit passager | valeur de `Retry-After`, sinon 1 min (`KEY_COOLDOWN_RATE_MS`) |
+
+Les erreurs **non liées à la clé** (`400` mauvais modèle, `404`, timeout, défi
+Cloudflare…) ne consomment **pas** les autres clés : elles sont renvoyées telles quelles.
+
+### Stratégie
+
+`KEY_STRATEGY` :
+
+- `failover` *(défaut)* — on reste sur la dernière clé qui fonctionne ; on ne change
+  qu'en cas d'échec. Simple, économique en requêtes.
+- `round-robin` — on répartit les requêtes sur toutes les clés pour consommer les
+  quotas en parallèle (utile si vous voulez lisser la charge sur le mois).
+
+### État des clés
+
+`GET /api/keys` renvoie le nombre de clés, la stratégie, et l'état de chacune
+(les clés ne sont **jamais** exposées en clair, seulement masquées) :
+
+```json
+{
+  "ok": true,
+  "rotation": { "enabled": true, "strategy": "failover", "keys": 3 },
+  "ready": 2,
+  "cooling": 1,
+  "pool": [
+    { "index": 0, "label": "cc_k…a1b2", "status": "ready", "cooldown_ms": 0, "reason": null },
+    { "index": 1, "label": "cc_k…c3d4", "status": "cooling", "cooldown_ms": 3540000, "reason": "quota/payment required (402)" }
+  ]
+}
+```
+
+### Points d'attention
+
+- L'état (clé courante + cooldowns) vit **en mémoire de l'isolate Edge** : il est partagé
+  entre les invocations à chaud et remis à zéro au cold start. Les cooldowns ne sont
+  qu'une optimisation — si **toutes** les clés sont en cooldown, la requête est quand même
+  tentée (« fail-open »), donc le service se rétablit tout seul dès qu'un quota repart.
+- Une requête n'est jamais facturée deux fois côté quota pour un même échec de clé :
+  les échecs quota se produisent **avant** toute génération.
+- Vous pouvez tout régler via les variables `KEY_COOLDOWN_*_MS` et `KEY_STRATEGY`
+  (voir `.env.example`).
 
 ---
 
@@ -116,6 +199,8 @@ Puis dans **Vercel → Project → Settings → Environment Variables**, ajoutez
 | Variable | Valeur | Obligatoire |
 | -------- | ------ | ----------- |
 | `CODECRAFT_API_KEY` | `cc_...` (votre clé CodeCraft) | ✅ |
+| `CODECRAFT_API_KEYS` | liste de clés pour la rotation, ex. `cc_a,cc_b,cc_c` | optionnel |
+| `KEY_STRATEGY` | `failover` (défaut) ou `round-robin` | optionnel |
 | `DEFAULT_MODEL` | `claude-opus-5` | optionnel |
 | `VISION_DEFAULT_MODEL` | `claude-opus-5` | optionnel |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | pour un historique durable | optionnel |

@@ -5,6 +5,7 @@
     { "source": "/vision", "destination": "/api/vision" },
     { "source": "/models", "destination": "/api/models" },
     { "source": "/reset", "destination": "/api/reset" },
+    { "source": "/keys", "destination": "/api/keys" },
     { "source": "/", "destination": "/api/index" }
   ]
 }
