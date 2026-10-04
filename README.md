@@ -44,6 +44,9 @@ pointent vers les mêmes handlers sans le préfixe `/api`.
 | `nostore=1` | non | Ignore complètement la mémoire |
 | `max_tokens` | non | Limite de génération |
 | `temperature` | non | 0.0 – 2.0 |
+| `web` | non | `1` active la **recherche web** (tool calling) et renvoie `sources` |
+| `max_results` | non | Nombre de résultats web par recherche (défaut 5) |
+| `web_rounds` | non | Nombre max de tours de recherche (défaut 3) |
 
 ### Modèles
 
@@ -150,6 +153,48 @@ Cloudflare…) ne consomment **pas** les autres clés : elles sont renvoyées te
 
 ---
 
+## Recherche web (`?web=1`)
+
+`GET /api/ai?prompt=...&web=1&uid=123` fait répondre le modèle **avec des informations du web**, sources incluses.
+
+⚠️ À savoir : CodeCraft annonce une capacité `web_search` par modèle, mais **aucun paramètre ne permet de l'activer** (vérifié : `web_search_options`, `plugins`, `tools:[{type:"web_search"}]`, `:online` → ignorés ou en erreur, et les modèles disent ne pas chercher). La recherche web est donc **implémentée côté `premium_rest`** via le **tool calling documenté** :
+
+1. on déclare un outil `web_search` ;
+2. le modèle répond `finish_reason: tool_calls` ;
+3. l'API interroge un moteur de recherche (`lib/search.mjs`) ;
+4. on renvoie les résultats au modèle, qui rédige la réponse finale avec `sources`.
+
+Ça marche avec **n'importe quel modèle capable de tool calling** (32 sur 33). Réponse type :
+
+```json
+{
+  "ok": true,
+  "uid": "123",
+  "model": "claude-opus-5",
+  "reply": "…",
+  "web_search": true,
+  "search_provider": "tavily",
+  "search_rounds": 1,
+  "searches": [{ "query": "…", "provider": "tavily", "results": 5 }],
+  "sources": [{ "title": "…", "url": "https://…", "snippet": "…" }]
+}
+```
+
+### Fournisseur de recherche
+
+Configurez-en **un seul** dans Vercel (détecté dans cet ordre) :
+
+| Variable | Service | Gratuit |
+| -------- | ------- | ------- |
+| `TAVILY_API_KEY` | [tavily.com](https://tavily.com) — **recommandé** | ~1 000 req/mois |
+| `BRAVE_API_KEY` | [brave.com/search/api](https://brave.com/search/api/) | ~2 000 req/mois |
+| `SERPAPI_API_KEY` | [serpapi.com](https://serpapi.com) | ~100 req/mois |
+| `SEARXNG_URL` | instance SearXNG auto-hébergée (API JSON activée) | illimité |
+
+Sans aucun de ces quatre, `?web=1` renvoie une erreur **`search_not_configured`** (400) avec la marche à suivre. Pour tester sans fournisseur, forcez `SEARCH_PROVIDER=duckduckgo` : repli **best-effort**, souvent bloqué depuis les datacenters (HTTP 202) — **non recommandé en production**. Réglez finement avec `SEARCH_PROVIDER`, `SEARCH_MAX_RESULTS`, `WEB_SEARCH_MAX_ROUNDS`, `SEARCH_TIMEOUT_MS`.
+
+---
+
 ## Exemples
 
 ```bash
@@ -201,6 +246,7 @@ Puis dans **Vercel → Project → Settings → Environment Variables**, ajoutez
 | `CODECRAFT_API_KEY` | `cc_...` (votre clé CodeCraft) | ✅ |
 | `CODECRAFT_API_KEYS` | liste de clés pour la rotation, ex. `cc_a,cc_b,cc_c` | optionnel |
 | `KEY_STRATEGY` | `failover` (défaut) ou `round-robin` | optionnel |
+| `TAVILY_API_KEY` | clé Tavily pour `?web=1` (ou Brave/SerpAPI/SearXNG) | optionnel |
 | `DEFAULT_MODEL` | `claude-opus-5` | optionnel |
 | `VISION_DEFAULT_MODEL` | `claude-opus-5` | optionnel |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | pour un historique durable | optionnel |
