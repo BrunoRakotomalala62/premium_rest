@@ -4,7 +4,7 @@ export const config = { runtime: 'edge' };
 // Continuous text conversation, remembered per uid.
 // If an `image` param is present it transparently routes to vision.
 
-import { preflight, readParams, json, errorResponse, requireAuth } from '../lib/http.mjs';
+import { preflight, readParams, json, errorResponse, requireAuth, raceJsonOrStream } from '../lib/http.mjs';
 import { runChat, runVision } from '../lib/ai.mjs';
 
 export default async function handler(req) {
@@ -19,11 +19,7 @@ export default async function handler(req) {
   const auth = requireAuth(req, params);
   if (auth) return auth;
 
-  try {
-    const hasImage = params.image || params.images;
-    const { status, body } = hasImage ? await runVision(params) : await runChat(params);
-    return json(body, status);
-  } catch (e) {
-    return errorResponse(e.status || 500, e.message || 'Internal error', e.code || 'internal_error', e.details);
-  }
+  // Long generations (>25s) are streamed so Edge Functions don't 504 without CORS.
+  const hasImage = params.image || params.images;
+  return raceJsonOrStream(hasImage ? runVision(params) : runChat(params));
 }
